@@ -1,0 +1,53 @@
+
+#main {
+	margin-top: 52px
+}
+
+.servers .server-menu {
+}
+
+.servers .server-menu .well {
+	padding: 8px 0 16px 0px;
+}
+
+.servers .server-content {
+}
+
+.rickshaw_legend a.action {
+	color: #999;
+	opacity: 1;
+}
+
+.servers .chart {
+	position: relative;
+}
+
+.servers .chart h4 {
+	margin-left: 50px;
+}
+
+.servers .chart .yaxis {
+	width: 50px;
+	height: 160px;
+	float: left;
+}
+
+.servers .chart .xaxis {
+	width: 520px;
+	height: 20px;
+	margin-left: 50px;
+	clear: both;
+	float: none;
+}
+
+.servers .chart .chart-container {
+	float: left;
+	width: 520px;
+	height: 180px;
+}
+
+.servers .chart .legend-container {
+	float: left;
+	margin-left: 10px;
+}
+
