@@ -3,11 +3,20 @@
 	margin-top: 52px
 }
 
+.server-groups li {
+	font-family: Menlo,monospace;
+}
+
 .servers .server-menu {
 }
 
 .servers .server-menu .well {
 	padding: 8px 0 16px 0px;
+}
+
+.servers .server-menu .nav li {
+	font-size: 11px;
+	font-family: Menlo,monospace;
 }
 
 .servers .server-content {
@@ -20,10 +29,12 @@
 
 .servers .chart {
 	position: relative;
+	min-height: 230px;
 }
 
 .servers .chart h4 {
 	margin-left: 50px;
+	font-family: Menlo,monospace;
 }
 
 .servers .chart .yaxis {

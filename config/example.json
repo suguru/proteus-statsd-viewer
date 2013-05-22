@@ -1,7 +1,7 @@
 {
 
 	"graphite": {
-		"url": "http://pecolodge-statsd-dev.amb-stg-294.a4c.jp/"
+		"url": "http://pecolodge-statsd-prd.amb-prd-150.a4c.jp/"
 	}
 
 }

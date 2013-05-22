@@ -9,7 +9,9 @@ var express = require('express')
 	, http = require('http')
 	, path = require('path')
 	, program = require('commander')
-	, config = require('./lib/config');
+	, config = require('./lib/config')
+	, domain = require('domain')
+;
 
 program
 .option('-p,--port [port]', 'Listening port. default) 8888')
@@ -32,7 +34,6 @@ try {
 	console.error(e.message);
 	process.exit(1);
 }
-
 
 var app = express();
 
@@ -60,3 +61,14 @@ http.createServer(app).listen(port, host, function(){
 	console.log('Express server listening on port ' + port);
 });
 
+process.on('uncaughtException', function(err) {
+	if (err) {
+		if (err.stack) {
+			console.log(err.stack);
+		} else if (err.message) {
+			console.log(err.message);
+		} else {
+			console.log(err);
+		}
+	}
+});

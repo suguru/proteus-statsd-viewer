@@ -156,18 +156,17 @@ define([], function() {
 			}
 
 			// Passing date through Date applies Date.parse, if necessary
-			date = date ? new Date(date) : new Date;
+			date = date ? new Date(date) : new Date();
 			if (isNaN(date)) throw SyntaxError("invalid date");
 
 			// Allow setting the utc argument via the mask
-			if (mask.slice(0, 4) == "UTC:") {
+			if (mask.slice(0, 4) === "UTC:") {
 				mask = mask.slice(4);
 				utc = true;
 			}
 
 			var	_ = utc ? "getUTC" : "get",
 			d = date[_ + "Date"](),
-			D = date[_ + "Day"](),
 			m = date[_ + "Month"](),
 			y = date[_ + "FullYear"](),
 			H = date[_ + "Hours"](),
@@ -298,6 +297,100 @@ define([], function() {
 		}
 	};
 
+	var formatter = {
+		date: function(format) {
+			return function(x) {
+				return new Date(x*1000).format(format);
+			};
+		},
+		percent: function(y) {
+			if (y === 0) {
+				return '';
+			} else {
+				return y + '%';
+			}
+		},
+		round: function(y) {
+			if (y === 0) {
+				return '';
+			} else {
+				return Math.round(y);
+			}
+		},
+		fixed: function(y) {
+			if (y === 0) {
+				return '';
+			} else {
+				return Math.round(y*100)/100;
+			}
+		},
+		byte: function(option) {
+			option = option || {};
+			return function(y) {
+				if (option.abs) {
+					y = Math.abs(y);
+				}
+				if (option.sector) {
+					y *= option.sector;
+				}
+				y = Math.round(y);
+				var yy = Math.abs(y);
+				if (yy === 0) {
+					return '';
+				}
+				if (yy < 1024) {
+					return y + 'B';
+				}
+				if (yy < 1024*1024) {
+					return Math.round(y/1024) + 'K';
+				}
+				if (yy < 1024*1024*1024) {
+					return Math.round(y/1024/1024) + 'M';
+				}
+				if (yy < 1024*1024*1024*1024) {
+					return Math.round(y/1024/1024/1024) + 'G';
+				}
+				if (yy < 1024*1024*1024*1024*1024) {
+					return Math.round(y/1024/1024/1024/1024) + 'T';
+				}
+			};
+		},
+		bytedetail: function(option) {
+			option = option || {};
+			return function(y) {
+				if (option.abs) {
+					y = Math.abs(y);
+				}
+				if  (option.sector) {
+					y *= option.sector;
+				}
+				var yy = Math.abs(y);
+				if (yy === 0) {
+					return '';
+				}
+				if (yy < 1024) {
+					return y + 'B';
+				}
+				if (yy < 1024*1024) {
+					return Math.round(y/1024*100)/100 + 'K';
+				}
+				if (yy < 1024*1024*1024) {
+					return Math.round(y/1024/1024*100)/100 + 'M';
+				}
+				if (yy < 1024*1024*1024*1024) {
+					return Math.round(y/1024/1024/1024*100)/100 + 'G';
+				}
+				if (yy < 1024*1024*1024*1024*1024) {
+					return Math.round(y/1024/1024/1024/1024*100)/100 + 'T';
+				}
+			};
+		}
+	};
+
+	function error(err) {
+		throw err;
+	}
+
 	return {
 		api: function(path, params, callback) {
 			if (typeof params === 'function') {
@@ -319,6 +412,8 @@ define([], function() {
 
 			});
 		},
-		ranges: ranges
+		formatter: formatter,
+		ranges: ranges,
+		error: error
 	};
 });

@@ -2,6 +2,7 @@
 define(['viewer-common'], function(common) {
 
 	var groups;
+	var formatter = common.formatter;
 
 	var ui = {};
 
@@ -27,7 +28,7 @@ define(['viewer-common'], function(common) {
 				ui
 				.groupnav
 				.tag('li', {'data-group':name})
-				.tag('a',{href:'#server/'+name}).text(name).gat()
+				.tag('a',{href:'#server/'+name+'/summary/cpu'}).text(name).gat()
 				.gat();
 
 			});
@@ -48,6 +49,8 @@ define(['viewer-common'], function(common) {
 
 	function show(group, type, name, from) {
 
+		from = from || '1hour';
+
 		$('.servers').remove();
 
 		if (group) {
@@ -66,26 +69,34 @@ define(['viewer-common'], function(common) {
 			var servernav = $.tag('ul.nav.nav-list');
 			left.append(servernav);
 
+			// Summary 
 			servernav
 			.tag('li.nav-header').text('by summary').gat();
-
-			/*
-			['CPU','Disk','Network'].forEach(function(metricsname) {
-				var lowername = metricsname.toLowerCase();
+			['CPU','Network','Disk'].forEach(function(metricsname) {
+				var lowername = metricsname.toLowerCase().replace(' ','-');
 				servernav
 				.tag('li', {'data-type':'summary-' + lowername})
 				.tag('a', {href:'#server/'+group+'/summary/'+lowername}).text(metricsname).gat()
 				.gat()
 				;
 			});
-			*/
 
+			// Metrics
 			servernav
 			.tag('li.nav-header').text('by metrics').gat();
 
+			['CPU Usage','Load Average','Network','Disk IO','Disk Usage'].forEach(function(metricsname) {
+				var lowername = metricsname.toLowerCase().replace(' ','-');
+				servernav
+				.tag('li', {'data-type':'metrics-' + lowername})
+				.tag('a', {href:'#server/'+group+'/metrics/'+lowername}).text(metricsname).gat()
+				.gat()
+				;
+			});
 			servernav
 			.tag('li.nav-header').text('by servers').gat();
 
+			// Servers
 			groups[group].forEach(function(servername) {
 				servernav
 				.tag('li', {'data-type':'server-'+servername})
@@ -103,9 +114,9 @@ define(['viewer-common'], function(common) {
 				if (type === 'server') {
 					showServer(group, name, from);
 				} else if (type === 'summary') {
-					showSummary(name);
+					showSummary(group, name, from);
 				} else if (type === 'metrics') {
-					showMetrics(name);
+					showMetrics(group, name, from);
 				}
 			}
 		}
@@ -115,12 +126,7 @@ define(['viewer-common'], function(common) {
 		callback();
 	}
 
-	function showServer(group, server, from) {
-
-		from = from || '1hour';
-
-		ui.content.empty();
-
+	function showRangeList(hash, from) {
 		var rangeContainer = $.tag('.range-selector');
 		var rangeList = $.tag('div.group.range-selector-list');
 		rangeContainer.append(rangeList);
@@ -143,19 +149,24 @@ define(['viewer-common'], function(common) {
 				button.addClass('active btn-success');
 			}
 			button.click(function() {
-				location.hash = 'server/'+group+'/server/'+server+'/'+name;
+				location.hash = hash+'/'+name;
 			});
 			btngroup.append(button);
 			prevrange = range;
 
 		});
+		ui.content.append(rangeContainer);
+	}
+
+	function showServer(group, server, from) {
+
+		from = from || '1hour';
+
+		ui.content.empty();
+
+		showRangeList('server/' + group + '/server/' + server, from);
 
 		var range = common.ranges[from];
-		from = range.from;
-
-		var summarize = getSummarize(range.seconds, 'avg');
-		var xformat = formatter.date(range.format);
-		var xticks = range.ticks;
 
 		var cpuContainer = $.tag('.chart.cpu');
 		var loadContainer = $.tag('.chart.load');
@@ -165,12 +176,326 @@ define(['viewer-common'], function(common) {
 		var diskContainer = $.tag('.chart.disk');
 		var usageContainer = $.tag('.chart.usage');
 
+		addCPUChart({
+			title: 'CPU Usage',
+			group: group,
+			server: server,
+			range: range,
+			metrics: 'cpu.*',
+			container: cpuContainer
+		});
+		addLoadAverageChart({
+			title: 'Load Average',
+			group: group,
+			server: server,
+			range: range,
+			metrics: 'load.*',
+			container: loadContainer
+		});
+		addSystemChart({
+			title: 'Interrupt / Contet Switch',
+			group: group,
+			server: server,
+			range: range,
+			metrics: 'system.*',
+			container: systemContainer
+		});
+		addNetworkChart({
+			title: 'Network Traffic',
+			group: group,
+			server: server,
+			range: range,
+			metrics: 'net.*.*',
+			container: networkContainer
+		});
+		addDiskChart({
+			title: 'Disk I/O',
+			group: group,
+			server: server,
+			range: range,
+			metrics: 'disk.*.*',
+			container: diskContainer
+		});
+		addDiskUsageChart({
+			title: 'Disk Usage',
+			group: group,
+			server: server,
+			range: range,
+			metrics: 'disk.*.usage.*',
+			container: usageContainer
+		});
+
+		ui.content.append(
+			cpuContainer,
+			loadContainer,
+			systemContainer,
+			networkContainer,
+			diskContainer,
+			usageContainer
+		);
+	}
+
+	function showSummary(group, type, from) {
+
+		ui.content.empty();
+
+		showRangeList('server/' + group + '/summary/' + type, from);
+
+		var range = common.ranges[from];
+		var container;
+
+		if (type === 'cpu') {
+
+			container = $.tag('div.chart.cpu');
+			addCPUChart({
+				title: 'CPU Usage/Average',
+				server: '*',
+				group: group,
+				metrics: [
+					'averageSeries(cpu.idle)',
+					'averageSeries(cpu.user)',
+					'averageSeries(cpu.system)',
+					'averageSeries(cpu.iowait)',
+					'averageSeries(cpu.irq)',
+					'averageSeries(cpu.nice)',
+					'averageSeries(cpu.softirq)',
+					'averageSeries(cpu.steal)'
+				].join(',')
+				,
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+			container = $.tag('div.chart.cpu');
+			addCPUChart({
+				title: 'CPU Usage/Max',
+				server: '*',
+				group: group,
+				metrics: [
+					'minSeries(cpu.idle)',
+					'maxSeries(cpu.user)',
+					'maxSeries(cpu.system)',
+					'maxSeries(cpu.iowait)',
+					'maxSeries(cpu.irq)',
+					'maxSeries(cpu.nice)',
+					'maxSeries(cpu.softirq)',
+					'maxSeries(cpu.steal)'
+				].join(','),
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+			container = $.tag('div.chart.load');
+			addLoadAverageChart({
+				title: 'Load Average/Average',
+				server: '*',
+				group: group,
+				metrics: [
+					'averageSeries(load.1m)',
+					'averageSeries(load.5m)',
+					'averageSeries(load.15m)'
+				].join(','),
+				calculate: 'averageSeries',
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+			container = $.tag('div.chart.load');
+			addLoadAverageChart({
+				title: 'Load Average/Max',
+				server: '*',
+				group: group,
+				metrics: [
+					'maxSeries(load.1m)',
+					'maxSeries(load.5m)',
+					'maxSeries(load.15m)'
+				].join(','),
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+		} else if (type === 'network') {
+
+			container = $.tag('div.chart.load');
+			addNetworkChart({
+				title: 'Network/Total',
+				server: '*',
+				group: group,
+				metrics: [
+					'sumSeries(net.*.send)',
+					'sumSeries(net.*.receive)'
+				].join(','),
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+			container = $.tag('div.chart.load');
+			addNetworkChart({
+				title: 'Network/Max',
+				server: '*',
+				group: group,
+				metrics: [
+					'maxSeries(net.*.send)',
+					'maxSeries(net.*.receive)'
+				].join(','),
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+		} else if (type === 'disk') {
+
+			container = $.tag('div.chart.disk');
+			addDiskChart({
+				title: 'Disk IO/Total',
+				server: '*',
+				group: group,
+				metrics: [
+					'sumSeries(disk.*.read)',
+					'sumSeries(disk.*.write)',
+				].join(','),
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+			container = $.tag('div.chart.disk');
+			addDiskChart({
+				title: 'Disk IO/Max',
+				server: '*',
+				group: group,
+				metrics: [
+					'maxSeries(disk.*.read)',
+					'maxSeries(disk.*.write)',
+				].join(','),
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+			container = $.tag('div.chart.usage');
+			addDiskUsageChart({
+				title: 'Disk Usage/Total',
+				server: '*',
+				group: group,
+				metrics: [
+					'sumSeries(disk.*.usage.available)',
+					'sumSeries(disk.*.usage.used)',
+				].join(','),
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+			container = $.tag('div.chart.usage');
+			addDiskUsageChart({
+				title: 'Disk Usage/Max',
+				server: '*',
+				group: group,
+				metrics: [
+					'maxSeries(disk.*.usage.available)',
+					'minSeries(disk.*.usage.used)',
+				].join(','),
+				range: range,
+				container: container
+			});
+			ui.content.append(container);
+
+		}
+
+	}
+
+	function showMetrics(group, type, from) {
+
+		ui.content.empty();
+
+		showRangeList('server/' + group + '/metrics/' + type, from);
+
+		var servers = groups[group];
+		var range = common.ranges[from];
+
+		servers.forEach(function(server) {
+			var container = $.tag('div.chart');
+			if (type === 'cpu-usage') {
+				addCPUChart({
+					title: server,
+					server: server,
+					group: group,
+					metrics: 'cpu.*',
+					range: range,
+					container: container
+				});
+			} else if (type === 'load-average') {
+				addLoadAverageChart({
+					title: server,
+					server: server,
+					group: group,
+					metrics: 'load.*',
+					range: range,
+					container: container
+				});
+			} else if (type === 'network') {
+				addNetworkChart({
+					title: server,
+					server: server,
+					group: group,
+					metrics: 'net.*.*',
+					range: range,
+					container: container
+				});
+			} else if (type === 'disk-io') {
+				addDiskChart({
+					title: server,
+					server: server,
+					group: group,
+					metrics: 'disk.*.*',
+					range: range,
+					container: container
+				});
+			} else if (type === 'disk-usage') {
+				addDiskUsageChart({
+					title: server,
+					server: server,
+					group: group,
+					metrics: 'disk.*.usage.*',
+					range: range,
+					container: container
+				});
+			}
+			ui.content.append(container);
+		});
+
+	}
+
+	function addCPUChart(option) {
+
+		var title = option.title;
+		var group = option.group;
+		var server = option.server;
+		var range = option.range;
+		var metrics = option.metrics;
+		var container = option.container;
+		var calculate = option.calculate;
+
+		var summarize = getSummarize(range.seconds, 'avg');
+		var xformat = formatter.date(range.format);
+		var xticks = range.ticks;
+		var from = range.from;
+
+		container.tag('h4').text(title).gat();
+
 		// cpu charts
 		common.api('chart', {
 			group: group,
 			server: server,
-			metrics: 'cpu.*',
+			metrics: metrics,
 			summarize: summarize,
+			calculate: calculate,
 			from: from
 		}, function(err, series) {
 
@@ -182,25 +507,43 @@ define(['viewer-common'], function(common) {
 			sortSeries(series.cpu, ['idle','nice','steal','softirq','irq','iowait','system','user']);
 
 			createChart({
-				title: 'CPU Usage',
+				title: title,
 				renderer: 'area',
 				series: series.cpu,
-				container: cpuContainer,
+				container: container,
 				colors: colors.cpu,
 				xformat: xformat,
 				xticks: xticks,
 				yformat: formatter.percent,
-				yticks: 4
+				yticks: 4,
+				max: option.max || 100
 			});
-
 		});
+	}
+
+	function addLoadAverageChart(option) {
+
+		var title = option.title;
+		var group = option.group;
+		var server = option.server;
+		var range = option.range;
+		var metrics = option.metrics;
+		var container = option.container;
+
+		var summarize = getSummarize(range.seconds, 'avg');
+		var xformat = formatter.date(range.format);
+		var xticks = range.ticks;
+
+		container.tag('h4').text(title).gat();
+
 		// load average
 		common.api('chart', {
 			group: group,
 			server: server,
-			metrics: 'load.*',
+			metrics: metrics,
 			summarize: summarize,
-			from: range.from
+			from: range.from,
+			calculate: option.calculate
 		}, function(err, series) {
 
 			if (err) {
@@ -217,10 +560,9 @@ define(['viewer-common'], function(common) {
 			));
 
 			createChart({
-				title: 'Load Average',
 				renderer: 'line',
 				series: series.load,
-				container: loadContainer,
+				container: container,
 				colors: colors.load,
 				stroke: true,
 				xformat: xformat,
@@ -230,14 +572,30 @@ define(['viewer-common'], function(common) {
 				max: max
 			});
 		});
+	}
 
-		// system contextsw/interrupt
+	function addSystemChart(option) {
+		var title = option.title;
+		var group = option.group;
+		var server = option.server;
+		var range = option.range;
+		var metrics = option.metrics;
+		var container = option.container;
+
+		var summarize = getSummarize(range.seconds, 'avg');
+		var xformat = formatter.date(range.format);
+		var xticks = range.ticks;
+
+		container.tag('h4').text(title).gat();
+
+		// load average
 		common.api('chart', {
 			group: group,
 			server: server,
-			metrics: 'system.*',
+			metrics: metrics,
 			summarize: summarize,
-			from: range.from
+			from: range.from,
+			calculate: option.calculate
 		}, function(err, series) {
 
 			if (err) {
@@ -245,23 +603,34 @@ define(['viewer-common'], function(common) {
 				return;
 			}
 
-			sortSeries(series.system, ['interrupt','contextsw']);
+			sortSeries(series.system, ['contextsw','interrupt']);
 
 			createChart({
-				title: 'Interrupts and Context Switch',
 				renderer: 'line',
 				series: series.system,
-				container: systemContainer,
-				//colors: colors.load,
+				container: container,
+				colors: colors.system,
 				stroke: true,
 				xformat: xformat,
 				xticks: xticks,
-				yformat: function(y) {
-					return formatter.round(y/10);
-				},
+				yformat: formatter.fixed,
 				yticks: 4
 			});
 		});
+	}
+
+	function addNetworkChart(option) {
+
+		var title = option.title;
+		var group = option.group;
+		var server = option.server;
+		var range = option.range;
+		var metrics = option.metrics;
+		var container = option.container;
+
+		var summarize = getSummarize(range.seconds, 'avg');
+		var xformat = formatter.date(range.format);
+		var xticks = range.ticks;
 
 		// running process charts
 		// interrupt/contextsw charts
@@ -269,9 +638,10 @@ define(['viewer-common'], function(common) {
 		common.api('chart', {
 			group: group,
 			server: server,
-			metrics: 'net.*.*',
+			metrics: metrics,
 			summarize: summarize,
-			from: from
+			from: range.from,
+			calculate: option.calculate
 		}, function(err, series) {
 
 			if (err) {
@@ -293,11 +663,12 @@ define(['viewer-common'], function(common) {
 				var max = Math.max(series[0].max, series[1].max);
 				var min = -max;
 
+				container.tag('h4').text(title + ' / '+ devname).gat();
+
 				createChart({
-					title: 'Network Traffic `' + devname + '`',
 					renderer: 'area',
 					series: series,
-					container: networkContainer,
+					container: container,
 					colors: colors.net,
 					stroke: true,
 					xformat: xformat,
@@ -310,14 +681,29 @@ define(['viewer-common'], function(common) {
 				});
 			});
 		});
+	}
+
+	function addDiskChart(option) {
+
+		var title = option.title;
+		var group = option.group;
+		var server = option.server;
+		var range = option.range;
+		var metrics = option.metrics;
+		var container = option.container;
+
+		var summarize = getSummarize(range.seconds, 'avg');
+		var xformat = formatter.date(range.format);
+		var xticks = range.ticks;
 
 		// disk charts
 		common.api('chart', {
 			group: group,
 			server: server,
-			metrics: 'disk.*.*',
+			metrics: metrics,
 			summarize: summarize,
-			from: from
+			from: range.from,
+			calculate: option.calculate
 		}, function(err, series) {
 
 			if (err) {
@@ -335,11 +721,12 @@ define(['viewer-common'], function(common) {
 				var max = Math.max(series[0].max, series[1].max);
 				var min = -max;
 
+				container.tag('h4').text(title + ' / '+ devname).gat();
+
 				createChart({
-					title: 'Disk IO `' + devname + '`',
 					renderer: 'area',
 					series: series,
-					container: diskContainer,
+					container: container,
 					colors: colors.disk,
 					stroke: true,
 					xformat: xformat,
@@ -352,14 +739,29 @@ define(['viewer-common'], function(common) {
 				});
 			});
 		});
+	}
+
+	function addDiskUsageChart(option) {
+
+		var title = option.title;
+		var group = option.group;
+		var server = option.server;
+		var range = option.range;
+		var metrics = option.metrics;
+		var container = option.container;
+
+		var summarize = getSummarize(range.seconds, 'avg');
+		var xformat = formatter.date(range.format);
+		var xticks = range.ticks;
 
 		// disk charts
 		common.api('chart', {
 			group: group,
 			server: server,
-			metrics: 'disk.*.usage.*',
+			metrics: metrics,
 			summarize: summarize,
-			from: from
+			from: range.from,
+			calculate: option.calculate
 		}, function(err, series) {
 
 			if (err) {
@@ -368,12 +770,12 @@ define(['viewer-common'], function(common) {
 			}
 
 			_.each(series.disk, function(series, devname) {
+				container.tag('h4').text(title + ' / ' + devname).gat();
 				sortSeries(series.usage, ['used','available']);
 				createChart({
-					title: 'Disk Usage `' + devname + '`',
 					renderer: 'area',
 					series: series.usage,
-					container: usageContainer,
+					container: container,
 					colors: colors.usage,
 					stroke: false,
 					xformat: xformat,
@@ -384,22 +786,6 @@ define(['viewer-common'], function(common) {
 				});
 			});
 		});
-
-		ui.content.append(
-			rangeContainer,
-			cpuContainer,
-			loadContainer,
-			systemContainer,
-			networkContainer,
-			diskContainer,
-			usageContainer
-		);
-	}
-
-	function showSummary(type) {
-	}
-
-	function showMetrics(type) {
 	}
 
 	/**
@@ -408,8 +794,6 @@ define(['viewer-common'], function(common) {
 	function createChart(opts) {
 
 		var container = opts.container;
-		// title
-		container.tag('h4').text(opts.title).gat();
 		// container
 		var ydiv = $.tag('.yaxis');
 		var chartdiv = $.tag('.chart-container');
@@ -559,96 +943,6 @@ define(['viewer-common'], function(common) {
 		usage: {
 			'used': '#ac3100',
 			'available': '#00b22d'
-		}
-	};
-
-	var formatter = {
-		date: function(format) {
-			return function(x) {
-				return new Date(x*1000).format(format);
-			};
-		},
-		percent: function(y) {
-			if (y === 0) {
-				return '';
-			} else {
-				return y + '%';
-			}
-		},
-		round: function(y) {
-			if (y === 0) {
-				return '';
-			} else {
-				return Math.round(y);
-			}
-		},
-		fixed: function(y) {
-			if (y === 0) {
-				return '';
-			} else {
-				return Math.round(y*100)/100;
-			}
-		},
-		byte: function(option) {
-			option = option || {};
-			return function(y) {
-				if (option.abs) {
-					y = Math.abs(y);
-				}
-				if (option.sector) {
-					y *= option.sector;
-				}
-				y = Math.round(y);
-				var yy = Math.abs(y);
-				if (yy === 0) {
-					return '';
-				}
-				if (yy < 1024) {
-					return y + 'B';
-				}
-				if (yy < 1024*1024) {
-					return Math.round(y/1024) + 'K';
-				}
-				if (yy < 1024*1024*1024) {
-					return Math.round(y/1024/1024) + 'M';
-				}
-				if (yy < 1024*1024*1024*1024) {
-					return Math.round(y/1024/1024/1024) + 'G';
-				}
-				if (yy < 1024*1024*1024*1024*1024) {
-					return Math.round(y/1024/1024/1024/1024) + 'T';
-				}
-			};
-		},
-		bytedetail: function(option) {
-			option = option || {};
-			return function(y) {
-				if (option.abs) {
-					y = Math.abs(y);
-				}
-				if  (option.sector) {
-					y *= option.sector;
-				}
-				var yy = Math.abs(y);
-				if (yy === 0) {
-					return '';
-				}
-				if (yy < 1024) {
-					return y + 'B';
-				}
-				if (yy < 1024*1024) {
-					return Math.round(y/1024*100)/100 + 'K';
-				}
-				if (yy < 1024*1024*1024) {
-					return Math.round(y/1024/1024*100)/100 + 'M';
-				}
-				if (yy < 1024*1024*1024*1024) {
-					return Math.round(y/1024/1024/1024*100)/100 + 'G';
-				}
-				if (yy < 1024*1024*1024*1024*1024) {
-					return Math.round(y/1024/1024/1024/1024*100)/100 + 'T';
-				}
-			};
 		}
 	};
 
